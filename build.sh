@@ -3,7 +3,7 @@
 binary_path="$1"
 arch="x64"
 
-if [ ! -f "binary_path" ]; then
+if [ ! -f "${binary_path}" ]; then
     echo "Usage: ./build.sh binary"
     exit
 fi
