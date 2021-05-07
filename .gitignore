@@ -1,2 +1,6 @@
 binary
 .gdb_history
+exp_x64.py
+ret2shell_x64
+core
+ptrace_demo.i64

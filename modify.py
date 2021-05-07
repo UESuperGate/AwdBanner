@@ -18,6 +18,7 @@ def add_segment(binary):
     segment = binary.replace(segment, binary[lief.ELF.SEGMENT_TYPES.NOTE])
     return segment.physical_address
 
+
 def main():
     binary = lief.parse('binary/dokodemo2')
     physical_address = add_segment(binary)
