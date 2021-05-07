@@ -49,10 +49,10 @@ void sandbox(){
 		}
 }
 
-int main() {
-	sandbox();
+// int main() {
+// 	sandbox();
 
-	system("ls");
-	printf("\n");
-	return 0;
-}
+// 	system("ls");
+// 	printf("\n");
+// 	return 0;
+// }

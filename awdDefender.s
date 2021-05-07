@@ -1,5 +1,10 @@
 .global asm_syscall 
 
+.global _start
+
+_start:
+    jmp sandbox
+
 asm_syscall:
     mov    %rdi,%rax
     mov    %rsi,%rdi

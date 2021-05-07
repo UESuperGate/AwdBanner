@@ -1,1 +1,5 @@
-gcc -fno-stack-protector ptrace_demo.c awdDefender.s -O2 -o ptrace_demo
+gcc -c  awdDefender.s ptrace_demo.c -fno-stack-protector
+ld awdDefender.o ptrace_demo.o
+objcopy -O binary -j .text a.out shellcode
+rm a.out
+rm *.o 
