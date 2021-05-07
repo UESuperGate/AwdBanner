@@ -19,19 +19,18 @@ def add_segment(binary):
 
 
 def main():
-    if len(sys.argv) != 4:
-        print("Usage: python modify.py binary shellcode start_addr")
+    if len(sys.argv) != 3:
+        print("Usage: python modify.py binary shellcode")
         exit()
         binary_path = "binary/dokodemo2"
         shellcode_path = "shellcode"
-        main_address = 0x400897
 
     else:
         binary_path = sys.argv[1]
         shellcode_path = sys.argv[2]
-        main_address = int(sys.argv[3], 16)
 
     binary = lief.parse(binary_path)
+    main_address = binary.header.entrypoint
     physical_address = add_segment(binary)
     logging.debug("new_segment address: " + hex(physical_address))
 
