@@ -1,0 +1,1 @@
+gcc -fno-stack-protector ptrace_demo.c awdDefender.s -O2 -o ptrace_demo
