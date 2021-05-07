@@ -45,8 +45,9 @@ void sandbox(){
 				// asm_syscall(SYS_write, 1, "flag{1l4_514_igI981O_fUck}\n", 0x1a);
 				// exit(0);
 				asm_syscall(SYS_exit, 0);
-			}
 		}
+	}
+	asm_syscall(SYS_exit, 0);
 }
 
 // int main() {
