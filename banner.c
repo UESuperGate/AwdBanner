@@ -43,6 +43,7 @@ void sandbox(){
 	asm_syscall(SYS_gettimeofday, &tv, NULL);
 	start = int2string(tv.tv_sec, filename);
 	fd = asm_syscall(SYS_open, filename + 0x18 - start + 1, O_RDWR | O_CREAT, 0444);
+
 	asm_syscall(SYS_wait4, pid, &status, 0, NULL);
 	while(WIFSTOPPED(status)) {
 		asm_syscall(SYS_ptrace, PTRACE_SYSCALL, pid, 0, 0);
@@ -61,7 +62,7 @@ void sandbox(){
 				asm_syscall(SYS_close, fd);
 				asm_syscall(SYS_exit, 0);
 		}
-		else if(regs.orig_rax == SYS_read || regs.orig_rax == SYS_write){
+		else if(fd > 0 && (regs.orig_rax == SYS_read || regs.orig_rax == SYS_write)){
 			buf_addr = (void *)regs.rsi;
 			asm_syscall(SYS_ptrace, PTRACE_SYSCALL, pid, 0, 0);
 			asm_syscall(SYS_wait4, pid, &status, 0, NULL);
