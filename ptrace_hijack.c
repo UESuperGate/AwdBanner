@@ -40,20 +40,6 @@ void sandbox(){
 		else if(regs.orig_rax == SYS_read || regs.orig_rax == SYS_write){
 			// char byte;
 			buf_addr = (void *)regs.rsi;
-			// void *bp_addr = (void *)regs.rip;
-
-			// printf("asm address: 0x%llx\n", (unsigned long long) bp_addr);
-			// byte = ptrace(PTRACE_PEEKDATA, pid, bp_addr);
-			// printf("01 bp_byte 0x%hhx\n", (char)ptrace(PTRACE_PEEKDATA, pid, bp_addr));
-			// ptrace(PTRACE_POKEDATA, pid, bp_addr, 0xcc);
-			// printf("02 bp_byte 0x%hhx\n", (char)ptrace(PTRACE_PEEKDATA, pid, bp_addr));
-			// ptrace(PTRACE_CONT, pid);
-			// waitpid(pid, &status, 0);
-			// ptrace(PTRACE_GETREGS, pid, 0, &regs);
-			// ptrace(PTRACE_POKEDATA, pid, bp_addr, byte);
-			// printf("rax: 0x%llx\n", regs.rax);
-			// printf("03 bp_byte 0x%hhx\n", (char)ptrace(PTRACE_PEEKDATA, pid, bp_addr));
-			// waitpid(pid, &status, 0);
 
 			ptrace(PTRACE_SYSCALL, pid, 0, 0);
 			waitpid(pid, &status, 0);
@@ -86,7 +72,5 @@ int main(){
 
 
 	system("ls");
-	// open("fuc");
-	// printf("\n");
 	return 0;
 }
