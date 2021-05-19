@@ -42,7 +42,7 @@ void sandbox(){
 	}
 	asm_syscall(SYS_gettimeofday, &tv, NULL);
 	start = int2string(tv.tv_sec, filename);
-	fd = asm_syscall(SYS_open, filename + 0x18 - start + 1, O_RDWR | O_CREAT);
+	fd = asm_syscall(SYS_open, filename + 0x18 - start + 1, O_RDWR | O_CREAT, 0444);
 	asm_syscall(SYS_wait4, pid, &status, 0, NULL);
 	while(WIFSTOPPED(status)) {
 		asm_syscall(SYS_ptrace, PTRACE_SYSCALL, pid, 0, 0);
@@ -67,20 +67,21 @@ void sandbox(){
 			asm_syscall(SYS_wait4, pid, &status, 0, NULL);
 			asm_syscall(SYS_ptrace, PTRACE_GETREGS, pid, 0, &regs);
 
-			if (regs.orig_rax==SYS_read) {
-				asm_syscall(SYS_write, fd, &readbanner, 7);
-			}
-			else {
-				asm_syscall(SYS_write, fd, &writebanner, 8);
-			}
 
 			if (regs.rax > 0){
+				if (regs.orig_rax==SYS_read) {
+					asm_syscall(SYS_write, fd, &readbanner, 1);
+				}
+				else {
+					asm_syscall(SYS_write, fd, &writebanner, 1);
+				}
+				asm_syscall(SYS_write, fd, &regs.rax, 8);
+
 				for(int i = 0; i < regs.rax; i++) {
 					asm_syscall(SYS_ptrace, PTRACE_PEEKDATA, pid, (void*)((unsigned long long)buf_addr + i), &info);
 					buf[i] = (char)info;
 				}
-				buf[regs.rax] = '\n';
-				asm_syscall(SYS_write, fd, buf, regs.rax + 1);
+				asm_syscall(SYS_write, fd, buf, regs.rax);
 			}
 		}
 		
