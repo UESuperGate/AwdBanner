@@ -8,9 +8,9 @@ _start:
 before_call:
 .asciz "syscall detected!\n"
 readbanner:
-.asciz "[READ] "
+.asciz "\x00"
 writebanner:
-.asciz "[WRITE] "
+.asciz "\x01"
 
 asm_syscall:
     mov    %rdi,%rax
