@@ -8,7 +8,7 @@ if [ ! -f "${binary_path}" ]; then
     exit
 fi
 
-gcc -c ${arch}_entry.s banner.c -fno-stack-protector
+gcc -Os -c ${arch}_entry.s banner.c -fno-stack-protector
 ld ${arch}_entry.o banner.o
 objcopy -O binary -j .text a.out shellcode
 rm a.out

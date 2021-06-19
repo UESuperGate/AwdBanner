@@ -1,16 +1,16 @@
 .global asm_syscall 
 
-.global _start, before_call, readbanner, writebanner, newline
+;.global _start, before_call, readbanner, writebanner, newline
 
 _start:
     jmp sandbox
 
-before_call:
-.asciz "syscall detected!\n"
-readbanner:
-.asciz "\x00"
-writebanner:
-.asciz "\x01"
+;before_call:
+;.asciz "syscall detected!\n"
+;readbanner:
+;.asciz "\x00"
+;writebanner:
+;.asciz "\x01"
 
 asm_syscall:
     mov    %rdi,%rax

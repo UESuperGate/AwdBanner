@@ -1,65 +1,99 @@
-from capstone import *
 from pwn import *
 import lief, os, logging, struct, sys
-context.arch="amd64"
 
-# logging.basicConfig(level="INFO")
+context.arch = "amd64"
 
-"""
-    Replace note segment with LOAD segment.
-    We can specify permissions of it.
-"""
-def add_segment(binary):
-    segment = lief.ELF.Segment()
-    segment.type = lief.ELF.SEGMENT_TYPES.LOAD
-    segment.add(lief.ELF.SEGMENT_FLAGS.X)
-    segment.add(lief.ELF.SEGMENT_FLAGS.R)
-    segment.content = [0x0 for i in range(0x1000)]
-    segment = binary.replace(segment, binary[lief.ELF.SEGMENT_TYPES.NOTE])
-    return segment.physical_address
+logging.basicConfig(level="DEBUG")
+
+
+def bytes2list(shellcode):
+    return list(struct.unpack('B' * len(shellcode), shellcode))
 
 
 def main():
     if len(sys.argv) != 3:
         print("Usage: python modify.py binary shellcode")
-        exit()
+        # exit()
+        binary_path = "/home/mrh929/git/AwdBanner/binary/lonelywolf/lonelywolf"
+        shellcode_path = "/home/mrh929/git/AwdBanner/shellcode"
     else:
         binary_path = sys.argv[1]
         shellcode_path = sys.argv[2]
 
     binary = lief.parse(binary_path)
+    elf = ELF(binary_path)
 
     # get entrypoint
     start_address = binary.header.entrypoint
+    start_sc = binary.get_content_from_virtual_address(start_address, 0x30)
+    logging.debug("detect entrypoint: %s" % hex(start_address))
 
-    # add a new segment
-    physical_address = add_segment(binary)
-    logging.debug("new_segment address: " + hex(physical_address))
+    # get eh_frame_hdr
+    eh_frame_hdr = binary.get_section(".eh_frame_hdr")
+    eh_frame = binary.get_section(".eh_frame")
+    eh_frame_hdr_address = eh_frame_hdr.virtual_address
+    logging.debug("detect eh_frame_hdr: %s" % hex(eh_frame_hdr_address))
 
-    # change the entrypoint to new segment
-    binary.header.entrypoint = physical_address  
+    offset = eh_frame_hdr_address - (start_address + 5)
+    logging.debug("offset to eh_frame_hdr: %s" % hex(offset))
 
-    # read shellcode from file
-    with open(shellcode_path, "rb") as f:  
-        shellcode = [each for each in f.read()]
-
-    # a shellcode to redirect ret_address to _start
-    ret_content = asm("""   
+    mprotect_sc = asm("""
         call $+5
-        pop rax
-        sub rax, 0x5
-        sub rax, {}
-        push rax
-    """.format(hex(physical_address-start_address))) 
-    ret_code = list(struct.unpack('B'*len(ret_content), ret_content))  # assembly "jmp main+0xnn"
-    shellcode = ret_code + shellcode
+        pop rdi  
+        
+        push {}
+        pop rsi
+        add rdi, rsi
+        push rdi
+        and rdi, 0xFFFFFFFFFFFFF000
 
-    # patch address
-    binary.patch_address(physical_address, shellcode)
+        push 7
+        pop rdx
+
+        push 0x1000
+        pop rsi
+
+        push SYS_mprotect
+        pop rax
+        syscall
+        ret
+    """.format(hex(offset)))
+
+    logging.debug('length of mprotect_shellcode: %s' % hex(len(mprotect_sc)))
+    binary.patch_address(start_address, bytes2list(mprotect_sc))
+
+    start_disass = disasm(elf.read(elf.entry, 0x30), byte=False)
+    print(start_disass)
+
+    patched_disasm = ""
+    for line in start_disass.splitlines():
+        patched_disasm += line[line.find(":") + 1:] + "\n"
+
+    patched_disasm = patched_disasm.replace(
+        'rip', 'rip + %s' % hex(eh_frame_hdr_address - start_address))
+    print(patched_disasm)
+
+    patched_sc = asm(patched_disasm)
+    main_sc = asm("call $+%s" % hex(5+len(patched_sc))) + patched_sc
+
+    sandbox_sc = main_sc
+    # read shellcode from file
+    with open(shellcode_path, "rb") as f:
+        sandbox_sc += f.read()
+
+    logging.debug("length of sandbox_shellcode: %s" % hex(len(sandbox_sc)))
+
+    allowed_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
+    logging.debug("allowed length: %s" % hex(allowed_length))
+
+    assert (allowed_length > len(sandbox_sc))
+
+    binary.patch_address(eh_frame_hdr_address, bytes2list(sandbox_sc))
 
     # patch binary
     patched_path = binary_path + ".patched"
     binary.write(patched_path)
+
 
 if __name__ == "__main__":
     main()
