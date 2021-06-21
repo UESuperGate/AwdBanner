@@ -2,9 +2,7 @@ from pwn import *
 import lief, os, logging, struct, sys
 
 context.arch = "amd64"
-
 logging.basicConfig(level="DEBUG")
-
 
 def bytes2list(shellcode):
     return list(struct.unpack('B' * len(shellcode), shellcode))
@@ -77,9 +75,10 @@ def main():
     main_sc = asm("call $+%s" % hex(5+len(patched_sc))) + patched_sc
 
     sandbox_sc = main_sc
-    # read shellcode from file
-    with open(shellcode_path, "rb") as f:
-        sandbox_sc += f.read()
+    sandbox_sc += asm("""
+    
+    
+    """)
 
     logging.debug("length of sandbox_shellcode: %s" % hex(len(sandbox_sc)))
 
