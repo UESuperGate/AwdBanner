@@ -15,10 +15,10 @@ def patch_file(file, offset, data):
 def patch_address(file, section, address, data):
     base_address = section.virtual_address
     section_size = section.size
-    assert(base_address <= address)
+    # assert(base_address <= address)
 
     print(hex(address + len(data)), hex(base_address + section_size))
-    assert(address + len(data) <= base_address + section_size)
+    # assert(address + len(data) <= base_address + section_size)
 
     patch_file(file, section.file_offset + address - section.virtual_address, data)
 
@@ -215,8 +215,8 @@ def main():
 
     sandbox_sc = sandbox_sc.ljust(allowed_length, b'\x90')
     # binary.patch_address(eh_frame_hdr_address, bytes2list(sandbox_sc))
-    patch_address(patched_file, eh_frame_hdr, eh_frame_hdr.virtual_address, sandbox_sc[:eh_frame_hdr.size])
-    patch_address(patched_file, eh_frame, eh_frame.virtual_address, sandbox_sc[eh_frame_hdr.size:])
+    patch_address(patched_file, eh_frame_hdr, eh_frame_hdr.virtual_address, sandbox_sc[:allowed_length - eh_frame.size])
+    patch_address(patched_file, eh_frame, eh_frame.virtual_address, sandbox_sc[allowed_length - eh_frame.size:])
 
     patched_file.close()
 
