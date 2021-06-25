@@ -4,29 +4,49 @@ import lief, os, logging, struct, sys
 context.arch = "amd64"
 #logging.basicConfig(level="DEBUG")
 
-def bytes2list(shellcode):
-    return list(struct.unpack('B' * len(shellcode), shellcode))
+# def bytes2list(shellcode):
+#     return list(struct.unpack('B' * len(shellcode), shellcode))
 
+def patch_file(file, offset, data):
+    file.seek(offset)
+    file.write(data)
+    info("patched %6s bytes at %6s" % (hex(len(data)), hex(offset)))
+
+def patch_address(file, section, address, data):
+    base_address = section.virtual_address
+    section_size = section.size
+    assert(base_address <= address)
+
+    print(hex(address + len(data)), hex(base_address + section_size))
+    assert(address + len(data) <= base_address + section_size)
+
+    patch_file(file, section.file_offset + address - section.virtual_address, data)
 
 def main():
     if len(sys.argv) != 2:
         print("Usage: python modify.py binary")
         # exit()
-        binary_path = "/home/mrh929/git/AwdBanner/binary/lonelywolf/lonelywolf"
+        binary_path = "/home/mrh929/test/test/test"
     else:
         binary_path = sys.argv[1]
 
     binary = lief.parse(binary_path)
-    elf = ELF(binary_path)
+    ori_file = open(binary_path, 'rb')
+    patched_path = binary_path + ".patched"
+    patched_file = open(patched_path, 'wb')
+    patched_file.write(ori_file.read())
+    ori_file.close()
+
+    elf = ELF(binary_path, checksec=False)
 
     # get entrypoint
     start_address = binary.header.entrypoint
-    start_sc = binary.get_content_from_virtual_address(start_address, 0x30)
-    #logging.debug("detect entrypoint: %s" % hex(start_address))
 
     # get eh_frame_hdr
     eh_frame_hdr = binary.get_section(".eh_frame_hdr")
     eh_frame = binary.get_section(".eh_frame")
+    text = binary.get_section(".text")
+
     eh_frame_hdr_address = eh_frame_hdr.virtual_address
     #logging.debug("detect eh_frame_hdr: %s" % hex(eh_frame_hdr_address))
 
@@ -56,9 +76,12 @@ def main():
     """.format(hex(offset)))
 
     #logging.debug('length of mprotect_shellcode: %s' % hex(len(mprotect_sc)))
-    binary.patch_address(start_address, bytes2list(mprotect_sc))
+    patch_address(patched_file, text, start_address, mprotect_sc)
+
+
 
     start_disass = disasm(elf.read(elf.entry, 0x30), byte=False)
+    print("start_disass")
     print(start_disass)
 
     patched_disasm = ""
@@ -66,10 +89,14 @@ def main():
         patched_disasm += line[line.find(":") + 1:] + "\n"
 
     patched_disasm = patched_disasm.replace(
-        'rip', 'rip + %s' % hex(eh_frame_hdr_address - start_address))
-    print(patched_disasm)
-
+        'rip', 'rip + %s' % hex(start_address - (eh_frame_hdr_address + 5))) # the length of 'call' is 5
+    
     patched_sc = asm(patched_disasm)
+
+    print("\n\npatched_disasm")
+    print(disasm(patched_sc))
+
+
     main_sc = asm("call $+%s" % hex(5+len(patched_sc))) + patched_sc
 
     sandbox_sc = main_sc
@@ -177,21 +204,21 @@ def main():
         ret
     '''
     sandbox_sc += asm(sh)
-    log.warning(hex(len(asm(sh))))
+    log.warning("sandbox shellcode length: %6s" % hex(len(asm(sh))))
     #logging.debug("length of sandbox_shellcode: %s" % hex(len(sandbox_sc)))
 
     allowed_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
-    #logging.debug("allowed length: %s" % hex(allowed_length))
+    log.warning("allowed length: %6s" % hex(allowed_length))
 
     assert (allowed_length > len(sandbox_sc))
 
-    binary.patch_address(eh_frame_hdr_address, bytes2list(sandbox_sc))
 
-    # patch binary
-    patched_path = binary_path + ".patched"
-    os.system("touch {}".format(patched_path))
-    binary.write(patched_path)
-    os.system("chmod +x {}".format(patched_path))
+    sandbox_sc = sandbox_sc.ljust(allowed_length, b'\x90')
+    # binary.patch_address(eh_frame_hdr_address, bytes2list(sandbox_sc))
+    patch_address(patched_file, eh_frame_hdr, eh_frame_hdr.virtual_address, sandbox_sc[:eh_frame_hdr.size])
+    patch_address(patched_file, eh_frame, eh_frame.virtual_address, sandbox_sc[eh_frame_hdr.size:])
+
+    patched_file.close()
 
 
 if __name__ == "__main__":
