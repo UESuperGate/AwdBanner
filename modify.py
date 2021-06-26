@@ -1,59 +1,30 @@
+#!/usr/bin/python3
 from pwn import *
-import lief, os, logging, struct, sys
+import lief
 
 context.arch = "amd64"
-#logging.basicConfig(level="DEBUG")
 
-# def bytes2list(shellcode):
-#     return list(struct.unpack('B' * len(shellcode), shellcode))
-
-def patch_file(file, offset, data):
-    file.seek(offset)
-    file.write(data)
-    info("patched %6s bytes at %6s" % (hex(len(data)), hex(offset)))
-
-def patch_address(file, section, address, data):
-    base_address = section.virtual_address
-    section_size = section.size
-    # assert(base_address <= address)
-
-    print(hex(address + len(data)), hex(base_address + section_size))
-    # assert(address + len(data) <= base_address + section_size)
-
-    patch_file(file, section.file_offset + address - section.virtual_address, data)
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: python modify.py binary")
-        # exit()
-        binary_path = "/home/mrh929/test/test/test"
+        print("Usage: python3 modify.py binary")
+        exit()
     else:
         binary_path = sys.argv[1]
 
+    # get binary
     binary = lief.parse(binary_path)
-    ori_file = open(binary_path, 'rb')
-    patched_path = binary_path + ".patched"
-    patched_file = open(patched_path, 'wb')
-    patched_file.write(ori_file.read())
-    ori_file.close()
-
     elf = ELF(binary_path, checksec=False)
 
-    # get entrypoint
-    start_address = binary.header.entrypoint
-
-    # get eh_frame_hdr
+    # get sections
     eh_frame_hdr = binary.get_section(".eh_frame_hdr")
     eh_frame = binary.get_section(".eh_frame")
-    text = binary.get_section(".text")
 
-    eh_frame_hdr_address = eh_frame_hdr.virtual_address
-    #logging.debug("detect eh_frame_hdr: %s" % hex(eh_frame_hdr_address))
+    # This part is to trigger syscall 'mprotect'
+    #   to let .eh_frame and .eh_frame_hdr sections executable.
+    # So we can execute shellcode on them.
 
-    offset = eh_frame_hdr_address - (start_address + 5)
-    #logging.debug("offset to eh_frame_hdr: %s" % hex(offset))
-
-    mprotect_sc = asm("""
+    mprotect_shellcode = asm("""
         call $+5
         pop rdi  
         
@@ -73,34 +44,27 @@ def main():
         pop rax
         syscall
         ret
-    """.format(hex(offset)))
+    """.format(hex(eh_frame_hdr.virtual_address - (elf.entry + 5))))
 
-    #logging.debug('length of mprotect_shellcode: %s' % hex(len(mprotect_sc)))
-    patch_address(patched_file, text, start_address, mprotect_sc)
+    # This part is to create shellcode to execute function sandbox.
+    # And then let the program return to start for allocation.
+    # I use asm and disasm to change the offset of the shellcode.
+    start_disasm = disasm(elf.read(elf.entry, 0x30), byte=False, vma=elf.entry)
+    start_disasm_patched = ""
+    for line in start_disasm.splitlines():
+        start_disasm_patched += line[line.find(":") + 1:] + "\n"
 
+    start_disasm_patched = start_disasm_patched.replace(
+        'rip', 'rip + %s' %
+        hex(elf.entry -
+            (eh_frame_hdr.virtual_address + 5)))  # the length of 'call' is 5
+    start_shellcode_patched = asm(start_disasm_patched,
+                                  vma=eh_frame_hdr.virtual_address + 5)
 
-
-    start_disass = disasm(elf.read(elf.entry, 0x30), byte=False)
-    print("start_disass")
-    print(start_disass)
-
-    patched_disasm = ""
-    for line in start_disass.splitlines():
-        patched_disasm += line[line.find(":") + 1:] + "\n"
-
-    patched_disasm = patched_disasm.replace(
-        'rip', 'rip + %s' % hex(start_address - (eh_frame_hdr_address + 5))) # the length of 'call' is 5
-    
-    patched_sc = asm(patched_disasm)
-
-    print("\n\npatched_disasm")
-    print(disasm(patched_sc))
-
-
-    main_sc = asm("call $+%s" % hex(5+len(patched_sc))) + patched_sc
-
-    sandbox_sc = main_sc
-    sh='''
+    sandbox_shellcode = asm(
+        "call $+%s" %
+        hex(5 + len(start_shellcode_patched))) + start_shellcode_patched
+    sandbox_disasm = '''
     sandbox:
         push    r13
         push    r12
@@ -203,22 +167,23 @@ def main():
         syscall 
         ret
     '''
-    sandbox_sc += asm(sh)
-    log.warning("sandbox shellcode length: %6s" % hex(len(asm(sh))))
-    #logging.debug("length of sandbox_shellcode: %s" % hex(len(sandbox_sc)))
+    sandbox_shellcode += asm(sandbox_disasm)
+    maximum_write_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
 
-    allowed_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
-    log.warning("allowed length: %6s" % hex(allowed_length))
+    log.warning("sandbox shellcode length: %6s" %
+                hex(len(asm(sandbox_disasm))))
+    log.warning("allowed length: %6s" % hex(maximum_write_length))
 
-    assert (allowed_length > len(sandbox_sc))
+    # If shellcode is too long, then exit.
+    assert (maximum_write_length > len(sandbox_shellcode))
 
+    # Pad all the rest of the bytes with b'\x90'.
+    sandbox_shellcode = sandbox_shellcode.ljust(maximum_write_length, b'\x90')
 
-    sandbox_sc = sandbox_sc.ljust(allowed_length, b'\x90')
-    # binary.patch_address(eh_frame_hdr_address, bytes2list(sandbox_sc))
-    patch_address(patched_file, eh_frame_hdr, eh_frame_hdr.virtual_address, sandbox_sc[:allowed_length - eh_frame.size])
-    patch_address(patched_file, eh_frame, eh_frame.virtual_address, sandbox_sc[allowed_length - eh_frame.size:])
-
-    patched_file.close()
+    # Patch elf and save it.
+    elf.write(elf.entry, mprotect_shellcode)
+    elf.write(eh_frame_hdr.virtual_address, sandbox_shellcode)
+    elf.save(binary_path + ".patched")
 
 
 if __name__ == "__main__":
