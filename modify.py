@@ -15,6 +15,7 @@ def main():
     # get binary
     binary = lief.parse(binary_path)
     elf = ELF(binary_path, checksec=False)
+    log.success("parse elf success")
 
     # get sections
     eh_frame_hdr = binary.get_section(".eh_frame_hdr")
@@ -24,6 +25,7 @@ def main():
     #   to let .eh_frame and .eh_frame_hdr sections executable.
     # So we can execute shellcode on them.
 
+    log.info("generating shellcode...")
     mprotect_shellcode = asm("""
         call $+5
         pop rdi  
@@ -168,22 +170,27 @@ def main():
         ret
     '''
     sandbox_shellcode += asm(sandbox_disasm)
-    maximum_write_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
+    log.success("shellcode generated!")
 
-    log.warning("sandbox shellcode length: %6s" %
+    maximum_write_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
+    log.info("sandbox shellcode length: %6s" %
                 hex(len(asm(sandbox_disasm))))
-    log.warning("allowed length: %6s" % hex(maximum_write_length))
+    log.info("allowed length: %6s" % hex(maximum_write_length))
 
     # If shellcode is too long, then exit.
-    assert (maximum_write_length > len(sandbox_shellcode))
+    if maximum_write_length < len(sandbox_shellcode):
+        log.error("shellcode is too long!")
+        exit()
 
     # Pad all the rest of the bytes with b'\x90'.
     sandbox_shellcode = sandbox_shellcode.ljust(maximum_write_length, b'\x90')
 
     # Patch elf and save it.
+    log.info("saving patches...")
     elf.write(elf.entry, mprotect_shellcode)
     elf.write(eh_frame_hdr.virtual_address, sandbox_shellcode)
     elf.save(binary_path + ".patched")
+    log.success("patch success!")
 
 
 if __name__ == "__main__":
