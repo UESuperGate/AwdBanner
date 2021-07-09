@@ -173,18 +173,6 @@ def main():
         mov    r8,r9
         syscall 
         ret
-    LOG:
-        push    rax
-        mov     rsi,rsp
-        xor     rax,rax
-        inc     rax
-        xor     rdi,rdi
-        inc     rdi
-        mov     rdx,0x8
-        mov rdx,rax
-        syscall
-        pop rax
-        ret
     '''
     sandbox_shellcode += asm(sandbox_disasm)
     log.success("shellcode generated!")
@@ -212,3 +200,19 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# log func for debug
+'''
+    LOG:
+        push    rax
+        mov     rsi,rsp
+        xor     rax,rax
+        inc     rax
+        xor     rdi,rdi
+        inc     rdi
+        mov     rdx,0x8
+        mov rdx,rax
+        syscall
+        pop rax
+        ret
+'''
