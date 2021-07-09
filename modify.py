@@ -183,9 +183,8 @@ def main():
     log.info("allowed length: %6s" % hex(maximum_write_length))
 
     # If shellcode is too long, exit.
-    if maximum_write_length < len(asm(sandbox_disasm)):
+    if maximum_write_length < len(sandbox_shellcode):
         log.error("shellcode is too long!")
-        exit()
 
     # Pad all the rest of the bytes with b'\x90'.
     sandbox_shellcode = sandbox_shellcode.ljust(maximum_write_length, b'\x90')
