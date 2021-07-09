@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 from pwn import *
+from os import chmod
 import lief
 
 context.arch = "amd64"
@@ -15,7 +16,7 @@ def main():
     # get binary
     binary = lief.parse(binary_path)
     elf = ELF(binary_path, checksec=False)
-    log.success("parse elf success")
+    log.success("parse elf success!")
 
     # get sections
     eh_frame_hdr = binary.get_section(".eh_frame_hdr")
@@ -23,8 +24,7 @@ def main():
 
     # This part is to trigger syscall 'mprotect'
     #   to let .eh_frame and .eh_frame_hdr sections executable.
-    # So we can execute shellcode on them.
-
+    # Then we can execute shellcode on them.
     log.info("generating shellcode...")
     mprotect_shellcode = asm("""
         call $+5
@@ -34,17 +34,17 @@ def main():
         pop rsi
         add rdi, rsi
         push rdi
-        and rdi, 0xFFFFFFFFFFFFF000
+        and rdi, 0xFFFFFFFFFFFFF000  # mprotect address
 
-        push 7
-        pop rdx
+        push 5
+        pop rdx # prot = rx
 
         push 0x1000
-        pop rsi
+        pop rsi # size = 0x1000
 
         push SYS_mprotect
         pop rax
-        syscall
+        syscall # syscall(mprotect)
         ret
     """.format(hex(eh_frame_hdr.virtual_address - (elf.entry + 5))))
 
@@ -179,9 +179,10 @@ def main():
 
     maximum_write_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
     log.info("sandbox shellcode length: %6s" % hex(len(asm(sandbox_disasm))))
+    log.info("total length: %6s" % hex(len(sandbox_shellcode)))
     log.info("allowed length: %6s" % hex(maximum_write_length))
 
-    # If shellcode is too long, then exit.
+    # If shellcode is too long, exit.
     if maximum_write_length < len(asm(sandbox_disasm)):
         log.error("shellcode is too long!")
         exit()
@@ -194,7 +195,8 @@ def main():
     elf.write(elf.entry, mprotect_shellcode)
     elf.write(eh_frame_hdr.virtual_address, sandbox_shellcode)
     elf.save(binary_path + ".patched")
-    os.system("chmod +x "+binary_path + ".patched")
+    # os.system("chmod +x " + binary_path + ".patched")
+    chmod(binary_path + ".patched", 0o755)
     log.success("patch success!")
 
 
