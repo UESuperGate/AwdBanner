@@ -95,7 +95,7 @@ def main():
         xchg    rax, rsi
         call    asm_syscall
         jmp DEAD
-    WATCH: 
+    WATCH:
         lea     r12, [rsp+4]
         mov     rsi, rax
         mov     rbx, rax
@@ -109,34 +109,39 @@ def main():
         call    asm_syscall
     LOOP:
         cmp     byte ptr [rsp+4], 0x7F
-        jnz     loc_143
+        jnz     EXT
         mov     edx, ebp
-        push 0x18
-        pop rsi
-        push 0x65
-        pop rdi
-        xor rcx,rcx
+        push    0x18
+        pop     rsi
+        push    0x65
+        pop     rdi
+        xor     r8, r8
+        xor     rcx,rcx
         call    asm_syscall
         mov     rdx, r12
         mov     esi, ebp
-        push 61
-        pop rdi
-        xor rcx,rcx
+        push    61
+        pop     rdi
+        xor     rcx,rcx
+        xor     r8,r8
         call    asm_syscall
         mov     edx, ebp
         mov     r8, r13
-        push 0xc
-        pop rsi
-        push 0x65
-        pop rdi
-        xor rcx,rcx
+        push    0xc
+        pop     rsi
+        push    0x65
+        pop     rdi
+        xor     rcx,rcx
         call    asm_syscall
         mov     rax, [rsp+0x80]
+        cmp rax,335
+        ja EXT
+        
         lea     rdx, [rax-0x38]
         cmp     rdx, 3
-        jbe     short KILL
+        jbe     KILL
         cmp     rax, 2
-        jnz     short LOOP
+        jnz     LOOP
     KILL:
         mov     r8, r13
         xor     ecx, ecx
@@ -148,7 +153,7 @@ def main():
         pop rdi
         mov     qword ptr [rsp+0x80], 0xE7
         call    asm_syscall
-    loc_143:
+    EXT:
         push 0x3c
         pop rdi
         call    asm_syscall
@@ -168,17 +173,28 @@ def main():
         mov    r8,r9
         syscall 
         ret
+    LOG:
+        push    rax
+        mov     rsi,rsp
+        xor     rax,rax
+        inc     rax
+        xor     rdi,rdi
+        inc     rdi
+        mov     rdx,0x8
+        mov rdx,rax
+        syscall
+        pop rax
+        ret
     '''
     sandbox_shellcode += asm(sandbox_disasm)
     log.success("shellcode generated!")
 
     maximum_write_length = eh_frame.virtual_address + eh_frame.size - eh_frame_hdr.virtual_address
-    log.info("sandbox shellcode length: %6s" %
-                hex(len(asm(sandbox_disasm))))
+    log.info("sandbox shellcode length: %6s" % hex(len(asm(sandbox_disasm))))
     log.info("allowed length: %6s" % hex(maximum_write_length))
 
     # If shellcode is too long, then exit.
-    if maximum_write_length < len(sandbox_shellcode):
+    if maximum_write_length < len(asm(sandbox_disasm)):
         log.error("shellcode is too long!")
         exit()
 
@@ -190,6 +206,7 @@ def main():
     elf.write(elf.entry, mprotect_shellcode)
     elf.write(eh_frame_hdr.virtual_address, sandbox_shellcode)
     elf.save(binary_path + ".patched")
+    os.system("chmod +x "+binary_path + ".patched")
     log.success("patch success!")
 
 
