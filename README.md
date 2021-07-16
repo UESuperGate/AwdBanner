@@ -41,6 +41,6 @@ And the patched file will be at the same directory as the original file.
 ### TODO
 
 - [x] x64 support
-- [ ] smaller shellcode
+- [ ] shorter shellcode
 - [ ] syscall self-selection
 - [ ] x86/arm/arm64 support
